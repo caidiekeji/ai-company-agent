@@ -23,7 +23,7 @@ jobs:
           cache: pip
 
       - name: 安装依赖
-        run: pip install fastapi "uvicorn[standard]" httpx keyring cryptography
+        run: pip install -r requirements.txt
 
       - name: 语法检查
         run: python -m compileall -q app
@@ -93,7 +93,7 @@ jobs:
       - name: 打包 sidecar（PyInstaller onedir）
         working-directory: backend
         run: |
-          pip install fastapi "uvicorn[standard]" httpx keyring cryptography pyinstaller
+          pip install -r requirements.txt pyinstaller
           pyinstaller --noconfirm --onedir --name ai-company-agent \
             --collect-all uvicorn \
             run.py
