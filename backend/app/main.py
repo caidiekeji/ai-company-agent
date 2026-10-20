@@ -5,17 +5,24 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from . import embedding
 from .db import init_db
-from .routers import configs, kb, meeting, org
+from .routers import configs, kb, meeting, org, rpa_router, settings_router, voice_router
+
+APP_VERSION = "1.2.0"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    try:
+        embedding.ensure_vec_tables()
+    except Exception:
+        pass
     yield
 
 
-app = FastAPI(title="AI Company Agent", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="AI Company Agent", version=APP_VERSION, lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -28,11 +35,14 @@ app.include_router(configs.router)
 app.include_router(org.router)
 app.include_router(meeting.router)
 app.include_router(kb.router)
+app.include_router(voice_router.router)
+app.include_router(rpa_router.router)
+app.include_router(settings_router.router)
 
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "service": "ai-company-agent"}
+    return {"ok": True, "service": "ai-company-agent", "version": APP_VERSION}
 
 
 def _find_dist() -> Path | None:
@@ -76,7 +86,7 @@ def main() -> None:
         port = _pick_port()
         url = f"http://127.0.0.1:{port}/"
         threading.Timer(1.2, lambda: webbrowser.open(url)).start()
-        print(f"智企 Agent 已启动：{url}\n关闭本窗口即退出应用。")
+        print(f"智企 Agent v{APP_VERSION} 已启动：{url}\n关闭本窗口即退出应用。")
         import uvicorn
 
         uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")

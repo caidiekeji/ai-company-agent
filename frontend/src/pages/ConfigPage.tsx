@@ -3,8 +3,11 @@ import { api } from '../api'
 import { IconCheck, IconPlus, IconTrash } from '../icons'
 
 type Kind = 'llm' | 'asr' | 'tts'
-type Vendor = { id: string; name: string; base_url?: string; local?: boolean }
-type Credential = { id: number; provider: string; alias: string; base_url?: string; api_key_masked: string }
+type Vendor = { id: string; name: string; base_url?: string; local?: boolean; models?: string[]; params?: string[] }
+type Credential = {
+  id: number; provider: string; alias: string; base_url?: string; api_key_masked: string
+  refs?: { kind: string; id: number; label: string }[]
+}
 type Config = {
   id: number; provider: string; model_id?: string; voice_id?: string
   is_default: number; engine_type?: string; credential_label?: string
@@ -30,6 +33,8 @@ export default function ConfigPage() {
   const [alias, setAlias] = useState('默认')
   const [baseUrl, setBaseUrl] = useState('')
   const [apiKey, setApiKey] = useState('')
+  const [modelPath, setModelPath] = useState('')
+  const [extraParams, setExtraParams] = useState('{}')
 
   const vendor = vendors.find((v) => v.id === vendorId)
   const isLocal = !!vendor?.local
@@ -43,6 +48,7 @@ export default function ConfigPage() {
     setVendors(vs); setCreds(cs); setConfigs(cfgs)
     setVendorId(''); setCredSel(''); setModelId(''); setVoiceId('')
     setModels([]); setVoices([]); setNote(''); setApiKey(''); setSetDefault(false)
+    setModelPath(''); setExtraParams('{}')
   }, [kind])
 
   useEffect(() => { reload().catch((e) => setMsg(String(e))) }, [reload])
@@ -56,6 +62,7 @@ export default function ConfigPage() {
     setAlias('默认')
     setCredSel('')
     setModels([]); setVoices([]); setNote(''); setModelId(''); setVoiceId('')
+    if (v?.local) { setModelPath(''); setExtraParams('{}') }
     if (v && !v.local) setCredSel(vendorCreds.length ? '' : '__new__')
   }
 
@@ -88,7 +95,12 @@ export default function ConfigPage() {
     }
     await api(`/api/configs/${kind}`, {
       method: 'POST',
-      body: { provider: vendorId, credential_id: cid, model_id: modelId, voice_id: voiceId || null, set_default: setDefault },
+      body: {
+        provider: vendorId, credential_id: cid, model_id: modelId, voice_id: voiceId || null,
+        model_path: modelPath || null, extra_params_json: extraParams,
+        temperature: 0.7, max_tokens: 2048, context_window: 32768,
+        set_default: setDefault,
+      },
     })
     setMsg('已保存')
     reload()
@@ -191,6 +203,19 @@ export default function ConfigPage() {
                   <input value={voiceId} onChange={(e) => setVoiceId(e.target.value)} />
                 </>
               ))}
+              {isLocal && (
+                <>
+                  <label>本地模型包路径（可选，需已在模型包管理中下载）</label>
+                  <input value={modelPath} onChange={(e) => setModelPath(e.target.value)}
+                    placeholder="C:/.../data/models/sherpa_zh_en_faster_whisper_small" />
+                </>
+              )}
+              {vendor?.params && vendor.params.length > 0 && (
+                <>
+                  <label>额外参数（JSON）· 该厂商支持：{vendor.params.join(' / ')}</label>
+                  <input value={extraParams} onChange={(e) => setExtraParams(e.target.value)} />
+                </>
+              )}
               {note && <p className="note">{note}</p>}
               <label className="inline">
                 <input type="checkbox" checked={setDefault} onChange={(e) => setSetDefault(e.target.checked)} />
@@ -232,8 +257,19 @@ export default function ConfigPage() {
               <div>
                 <strong>{c.provider}</strong> · {c.alias}
                 <div className="note mono">{c.base_url || '—'}</div>
+                {c.refs && c.refs.length > 0 && (
+                  <div className="note">被 {c.refs.length} 个配置引用：
+                    {c.refs.map((r) => `${r.kind}#${r.id}`).join('、')}</div>
+                )}
               </div>
-              <span className="mono note">{c.api_key_masked}</span>
+              <div className="row">
+                <span className="mono note">{c.api_key_masked}</span>
+                <button className="btn small danger ghost" title="删除（被引用时会被拦截）"
+                  onClick={async () => {
+                    try { await api(`/api/credentials/${c.id}`, { method: 'DELETE' }); reload() }
+                    catch (e) { setMsg(String(e)) }
+                  }}><IconTrash /></button>
+              </div>
             </div>
           ))}
         </section>

@@ -1,0 +1,76 @@
+{
+  "models": {
+    "aliyun_asr": ["paraformer-v2", "paraformer-realtime-v2", "paraformer-general-v2", "fun-asr"],
+    "tencent_asr": ["16k_zh", "16k_zh-cn", "16k_en"],
+    "xfyun_asr": ["iat"],
+    "sherpa_asr": ["sherpa-zh-en-faster-whisper-small", "sherpa-zh-conformer"],
+    "whisper_cpp": ["whisper-small", "whisper-base", "whisper-tiny"],
+    "aliyun_tts": ["cosyvoice-v1", "cosyvoice-v2", "sambert-zhichu-v1"],
+    "tencent_tts": ["zh-CN-XiaoxiaoNeural", "zh-CN-YunxiNeural", "zh-CN-YunjianNeural"],
+    "xfyun_tts": ["xiaoyan", "aisjiuxu", "aisjiuhui"],
+    "volcengine_tts": ["zh_female_cancan", "zh_male_yuanboxiaoao"],
+    "moss_tts": ["moss-tts-nano"],
+    "cosyvoice_local": ["cosyvoice-mini"],
+    "openai_asr": ["whisper-1", "gpt-4o-transcribe", "gpt-4o-mini-transcribe"],
+    "openai_tts": ["tts-1", "tts-1-hd", "gpt-4o-mini-tts"],
+    "groq_asr": ["whisper-large-v3", "whisper-large-v3-turbo"],
+    "siliconflow_asr": ["FunAudioLLM/SenseVoiceSmall", "BAAI/bge-speech"],
+    "azure_tts": ["zh-CN-XiaoxiaoNeural", "zh-CN-XiaoyiNeural", "zh-CN-YunxiNeural", "zh-CN-YunyangNeural", "en-US-JennyNeural", "en-US-GuyNeural"]
+  },
+  "voices": {
+    "openai_tts": [
+      { "id": "alloy", "name": "Alloy（中性）", "gender": "其他" },
+      { "id": "echo", "name": "Echo（男）", "gender": "男" },
+      { "id": "fable", "name": "Fable（男）", "gender": "男" },
+      { "id": "onyx", "name": "Onyx（男）", "gender": "男" },
+      { "id": "nova", "name": "Nova（女）", "gender": "女" },
+      { "id": "shimmer", "name": "Shimmer（女）", "gender": "女" }
+    ],
+    "azure_tts": [
+      { "id": "zh-CN-XiaoxiaoNeural", "name": "晓晓（女）", "gender": "女" },
+      { "id": "zh-CN-XiaoyiNeural", "name": "晓伊（女）", "gender": "女" },
+      { "id": "zh-CN-YunxiNeural", "name": "云希（男）", "gender": "男" },
+      { "id": "zh-CN-YunyangNeural", "name": "云扬（男）", "gender": "男" }
+    ],
+    "aliyun_tts": [
+      { "id": "longxiaochun", "name": "龙小淳（女）", "gender": "女" },
+      { "id": "longxiaobai", "name": "龙小白（女）", "gender": "女" },
+      { "id": "longcheng", "name": "龙橙（男）", "gender": "男" },
+      { "id": "longchengda", "name": "龙橙大（男）", "gender": "男" }
+    ],
+    "tencent_tts": [
+      { "id": "zh-CN-XiaoxiaoNeural", "name": "晓晓（女）", "gender": "女" },
+      { "id": "zh-CN-YunxiNeural", "name": "云希（男）", "gender": "男" }
+    ],
+    "xfyun_tts": [
+      { "id": "xiaoyan", "name": "晓晓（女）", "gender": "女" },
+      { "id": "aisjiuxu", "name": "极速（男）", "gender": "男" }
+    ],
+    "volcengine_tts": [
+      { "id": "zh_female_cancan", "name": "灿灿（女）", "gender": "女" },
+      { "id": "zh_male_yuanboxiaoao", "name": "小霸王（男）", "gender": "男" }
+    ]
+  },
+  "gender_voice_map": {
+    "openai_tts": { "男": "onyx", "女": "nova", "其他": "alloy" },
+    "azure_tts": { "男": "zh-CN-YunxiNeural", "女": "zh-CN-XiaoxiaoNeural", "其他": "zh-CN-XiaoxiaoNeural" },
+    "aliyun_tts": { "男": "longcheng", "女": "longxiaochun", "其他": "longxiaochun" },
+    "tencent_tts": { "男": "zh-CN-YunxiNeural", "女": "zh-CN-XiaoxiaoNeural", "其他": "zh-CN-XiaoxiaoNeural" },
+    "xfyun_tts": { "男": "aisjiuxu", "女": "xiaoyan", "其他": "xiaoyan" },
+    "volcengine_tts": { "男": "zh_male_yuanboxiaoao", "女": "zh_female_cancan", "其他": "zh_female_cancan" }
+  },
+  "asr_params": {
+    "openai_asr": ["language", "prompt", "temperature"],
+    "aliyun_asr": ["language", "punctuation", "vocabulary_id", "sample_rate"],
+    "tencent_asr": ["language", "sample_rate", "voice_format", "need_punctuation"],
+    "xfyun_asr": ["language", "sample_rate", "dwa"]
+  },
+  "tts_params": {
+    "openai_tts": ["speed", "response_format", "instructions"],
+    "azure_tts": ["speed", "pitch", "volume", "style"],
+    "aliyun_tts": ["speed", "pitch", "volume", "format"],
+    "tencent_tts": ["speed", "volume", "sample_rate", "codec"],
+    "xfyun_tts": ["speed", "pitch", "volume", "audio_format"],
+    "volcengine_tts": ["speed", "volume", "sample_rate", "encoding"]
+  }
+}

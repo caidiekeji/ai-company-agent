@@ -1,9 +1,15 @@
-"""模型配置中心：厂商 / 凭证 / LLM·ASR·TTS 配置 统一范式（PRD 4.2）。"""
+"""模型配置中心：厂商 / 凭证 / LLM·ASR·TTS 配置 统一范式（PRD 4.2）。
+
+厂商清单来自 data/vendors.json + data/catalog.json（F-MOD-05 可扩展）。
+"""
+import json
+
 from fastapi import APIRouter, HTTPException
 
-from .. import llm_gateway
+from .. import llm_gateway, voice
 from ..db import execute, query, query_one
-from ..providers import vendor_list, vendor_of
+from ..providers import (BUILTIN_MODELS, extra_params_capability, reload_catalog,
+                          vendor_list, vendor_of, voices_for)
 from ..security import delete_secret, load_secret, mask_secret, store_secret
 
 router = APIRouter(prefix="/api", tags=["config"])
@@ -17,7 +23,21 @@ TABLES = {"llm": "llm_configs", "asr": "asr_configs", "tts": "tts_configs"}
 def vendors(kind: str):
     if kind not in KINDS:
         raise HTTPException(400, "kind 必须是 llm/asr/tts")
-    return vendor_list(kind)
+    out = []
+    for v in vendor_list(kind):
+        item = dict(v)
+        item["params"] = extra_params_capability(kind, v["id"])
+        item["models"] = BUILTIN_MODELS().get(v["id"], [])
+        if kind == "tts":
+            item["voices"] = voices_for(v["id"])
+        out.append(item)
+    return out
+
+
+@router.post("/vendors/reload")
+def reload_vendors():
+    reload_catalog()
+    return {"ok": True, "message": "厂商清单已重载"}
 
 
 # ---------- 凭证（F-MOD-01/02/03/06） ----------
@@ -27,11 +47,21 @@ def list_credentials():
                  "FROM provider_credentials ORDER BY id")
     for r in rows:
         r["api_key_masked"] = mask_secret(r.pop("api_key_ref"))
+        r["refs"] = credential_refs(r["id"])
     return rows
 
 
+def credential_refs(cid: int) -> list[dict]:
+    out = []
+    cols = {"llm_configs": "id, model_id", "asr_configs": "id, model_id", "tts_configs": "id, model_id, voice_id"}
+    for kind, table in TABLES.items():
+        for r in query(f"SELECT {cols[table]} FROM {table} WHERE credential_id=?", (cid,)):
+            out.append({"kind": kind, "id": r["id"], "label": r.get("model_id") or r.get("voice_id") or ""})
+    return out
+
+
 @router.post("/credentials")
-def create_credential(body: dict):
+def create_credential(body: dict | None = None):
     provider = body.get("provider", "").strip()
     alias = (body.get("alias") or "默认").strip()
     base_url = body.get("base_url") or None
@@ -72,11 +102,10 @@ def delete_credential(cid: int):
     if not row:
         raise HTTPException(404, "凭证不存在")
     affected = []
-    for t in TABLES.values():
-        affected += [{"kind": t.replace("_configs", ""), "id": r["id"]}
-                     for r in query(f"SELECT id FROM {t} WHERE credential_id=?", (cid,))]
+    for kind, table in TABLES.items():
+        affected += [{"kind": kind, "id": r["id"], "model_id": r.get("model_id")}
+                     for r in query(f"SELECT id, model_id FROM {table} WHERE credential_id=?", (cid,))]
     if affected:
-        # F-MOD-03：被引用时禁止直接删除
         raise HTTPException(409, detail={"message": "凭证被以下配置引用，禁止删除", "affected": affected})
     delete_secret(row["api_key_ref"])
     execute("DELETE FROM provider_credentials WHERE id=?", (cid,))
@@ -111,7 +140,9 @@ def list_configs(kind: str):
     creds = {c["id"]: c for c in query("SELECT id, provider, alias FROM provider_credentials")}
     for r in rows:
         c = creds.get(r.get("credential_id"))
-        r["credential_label"] = f"{c['provider']} / {c['alias']}" if c else ("本地引擎" if r.get("engine_type") == "local" else None)
+        r["credential_label"] = f"{c['provider']} / {c['alias']}" if c else (
+            "本地引擎" if r.get("engine_type") == "local" else None)
+        r["voices"] = voices_for(r.get("provider", "")) if kind == "tts" else []
     return rows
 
 
@@ -124,10 +155,8 @@ def create_config(kind: str, body: dict):
         raise HTTPException(400, "provider 必填")
     vendor = vendor_of(kind, provider) or {}
     engine = "local" if vendor.get("local") else "cloud"
-    if engine == "cloud" and kind != "llm" and not body.get("credential_id"):
-        raise HTTPException(400, "云厂商需要先配置凭证")
-    if engine == "cloud" and kind == "llm" and provider not in ("openai_compat",) and not body.get("credential_id"):
-        raise HTTPException(400, "云厂商需要先配置凭证")
+    if engine == "cloud" and not body.get("credential_id"):
+        raise HTTPException(400, "云厂商需要先配置凭证（同一厂商的 LLM/ASR/TTS 共用一条凭证）")
     model_id = (body.get("model_id") or "").strip()
     if kind == "llm" and not model_id:
         raise HTTPException(400, "model_id 必填")
@@ -201,11 +230,9 @@ async def get_models(kind: str, body: dict):
 
 
 @router.post("/providers/tts/voices")
-def get_voices(body: dict):
-    from ..providers import BUILTIN_VOICES
-
+def get_voices(body: dict | None = None):
     provider = body.get("provider", "")
-    voices = BUILTIN_VOICES.get(provider)
+    voices = voices_for(provider, body.get("model_id", ""))
     if voices:
         return {"source": "builtin", "voices": voices}
     return {"source": "manual", "voices": [], "note": "该厂商音色需手动填写 voice_id"}
@@ -216,4 +243,29 @@ async def test_config(kind: str, cid: int):
     if kind not in KINDS:
         raise HTTPException(400, "kind 必须是 llm/asr/tts")
     row = _cfg_row(kind, cid)
+    if kind == "tts":
+        return await voice.test_tts(row)
+    if kind == "asr":
+        return await voice.test_asr(row)
     return await llm_gateway.test_connection(row)
+
+
+@router.post("/providers/{kind}/test-live")
+async def test_live(kind: str, body: dict):
+    """未保存前的连接测试（配置表单内直接测试）。"""
+    if kind not in KINDS:
+        raise HTTPException(400, "kind 必须是 llm/asr/tts")
+    cfg = dict(body.get("config") or {})
+    cfg["kind"] = kind
+    if not cfg.get("credential_id") and body.get("api_key"):
+        provider = cfg.get("provider", "")
+        alias = "临时测试"
+        ref = store_secret(provider, alias, body["api_key"])
+        cid = execute("INSERT INTO provider_credentials(provider, alias, base_url, api_key_ref) "
+                      "VALUES (?,?,?,?)", (provider, alias, cfg.get("base_url"), ref))
+        cfg["credential_id"] = cid
+    if kind == "tts":
+        return await voice.test_tts(cfg)
+    if kind == "asr":
+        return await voice.test_asr(cfg)
+    return await llm_gateway.test_connection(cfg)

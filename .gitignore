@@ -2,6 +2,7 @@
 backend/.venv/
 backend/data/
 backend/data_*/
+backend/exports/
 __pycache__/
 *.pyc
 
@@ -17,3 +18,12 @@ frontend/dist/
 # PyInstaller
 backend/dist/
 backend/build/
+
+# Tauri
+src-tauri/target/
+src-tauri/gen/
+src-tauri/resources/ai-company-agent/
+
+# 发布产物
+artifacts/
+*.zip

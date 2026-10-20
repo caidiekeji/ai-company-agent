@@ -179,12 +179,12 @@ async def fetch_models(vendor_id: str, base_url: str, api_key: str | None,
     if fmt == "mock":
         return {"source": "builtin", "models": ["mock-large", "mock-mini"]}
     if fmt in ("local", "cloud_asr", "cloud_tts"):
-        builtin = BUILTIN_MODELS.get(vendor_id, [])
+        builtin = BUILTIN_MODELS().get(vendor_id, [])
         if builtin:
             return {"source": "builtin", "models": builtin}
         return {"source": "manual", "models": [], "note": "该厂商无列表接口，请手动填写 model_id"}
     if not base_url:
-        return {"source": "manual", "models": BUILTIN_MODELS.get(vendor_id, []),
+        return {"source": "manual", "models": BUILTIN_MODELS().get(vendor_id, []),
                 "note": "请填写 Base URL 或手动输入 model_id"}
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
     try:
@@ -198,7 +198,7 @@ async def fetch_models(vendor_id: str, base_url: str, api_key: str | None,
                 raise RuntimeError("空列表")
             return {"source": "api", "models": sorted(ids)}
     except Exception as e:
-        builtin = BUILTIN_MODELS.get(vendor_id, [])
+        builtin = BUILTIN_MODELS().get(vendor_id, [])
         return {"source": "fallback", "models": builtin, "note": f"接口拉取失败（{e}），已回退内置清单"}
 
 

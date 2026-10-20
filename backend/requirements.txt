@@ -3,3 +3,6 @@ uvicorn[standard]
 httpx
 keyring
 cryptography
+python-multipart
+sqlite-vec
+playwright

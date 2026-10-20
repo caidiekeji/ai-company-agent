@@ -1,0 +1,38 @@
+{
+  "llm": [
+    { "id": "deepseek", "name": "DeepSeek", "api_format": "openai", "base_url": "https://api.deepseek.com/v1", "price_per_1k": 0.002, "context_window": 65536 },
+    { "id": "zhipu", "name": "智谱 GLM", "api_format": "openai", "base_url": "https://open.bigmodel.cn/api/paas/v4", "price_per_1k": 0.005, "context_window": 131072 },
+    { "id": "moonshot", "name": "Moonshot", "api_format": "openai", "base_url": "https://api.moonshot.cn/v1", "price_per_1k": 0.012, "context_window": 131072 },
+    { "id": "siliconflow", "name": "硅基流动", "api_format": "openai", "base_url": "https://api.siliconflow.cn/v1", "price_per_1k": 0.003, "context_window": 32768 },
+    { "id": "qianfan", "name": "百度千帆", "api_format": "openai", "base_url": "https://qianfan.baidubce.com/v2", "price_per_1k": 0.002, "context_window": 32768 },
+    { "id": "dashscope", "name": "阿里云百炼", "api_format": "openai", "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "price_per_1k": 0.004, "context_window": 131072 },
+    { "id": "volcengine", "name": "火山引擎 Ark", "api_format": "openai", "base_url": "https://ark.cn-beijing.volces.com/api/v3", "price_per_1k": 0.003, "context_window": 65536 },
+    { "id": "openai", "name": "OpenAI", "api_format": "openai", "base_url": "https://api.openai.com/v1", "price_per_1k": 0.015, "context_window": 128000 },
+    { "id": "anthropic", "name": "Anthropic", "api_format": "anthropic", "base_url": "https://api.anthropic.com", "price_per_1k": 0.075, "context_window": 200000 },
+    { "id": "google", "name": "Google Gemini", "api_format": "gemini", "base_url": "https://generativelanguage.googleapis.com/v1beta", "price_per_1k": 0.01, "context_window": 1000000 },
+    { "id": "ollama", "name": "Ollama（本地）", "api_format": "openai", "base_url": "http://127.0.0.1:11434/v1", "local": true, "price_per_1k": 0, "context_window": 32768 },
+    { "id": "lmstudio", "name": "LM Studio（本地）", "api_format": "openai", "base_url": "http://127.0.0.1:1234/v1", "local": true, "price_per_1k": 0, "context_window": 32768 },
+    { "id": "openai_compat", "name": "自定义（OpenAI 兼容）", "api_format": "openai", "base_url": "", "price_per_1k": 0.002, "context_window": 32768 },
+    { "id": "mock", "name": "Mock（离线演示/测试）", "api_format": "mock", "base_url": "", "local": true, "price_per_1k": 0, "context_window": 32768 }
+  ],
+  "asr": [
+    { "id": "openai_asr", "name": "OpenAI Whisper API", "api_format": "openai_asr", "base_url": "https://api.openai.com/v1" },
+    { "id": "groq_asr", "name": "Groq Whisper", "api_format": "openai_asr", "base_url": "https://api.groq.com/openai/v1" },
+    { "id": "siliconflow_asr", "name": "硅基流动 ASR", "api_format": "openai_asr", "base_url": "https://api.siliconflow.cn/v1" },
+    { "id": "aliyun_asr", "name": "阿里云智能语音", "api_format": "cloud_asr", "base_url": "" },
+    { "id": "tencent_asr", "name": "腾讯云 ASR", "api_format": "cloud_asr", "base_url": "" },
+    { "id": "xfyun_asr", "name": "讯飞 ASR", "api_format": "cloud_asr", "base_url": "" },
+    { "id": "sherpa_asr", "name": "sherpa-onnx（本地）", "api_format": "local", "base_url": "", "local": true },
+    { "id": "whisper_cpp", "name": "whisper.cpp（本地）", "api_format": "local", "base_url": "", "local": true }
+  ],
+  "tts": [
+    { "id": "openai_tts", "name": "OpenAI TTS", "api_format": "openai_tts", "base_url": "https://api.openai.com/v1" },
+    { "id": "azure_tts", "name": "Azure TTS", "api_format": "azure_tts", "base_url": "" },
+    { "id": "aliyun_tts", "name": "阿里云 CosyVoice", "api_format": "cloud_tts", "base_url": "" },
+    { "id": "tencent_tts", "name": "腾讯云 TTS", "api_format": "cloud_tts", "base_url": "" },
+    { "id": "xfyun_tts", "name": "讯飞 TTS", "api_format": "cloud_tts", "base_url": "" },
+    { "id": "volcengine_tts", "name": "火山引擎 TTS", "api_format": "cloud_tts", "base_url": "" },
+    { "id": "moss_tts", "name": "MOSS-TTS（本地）", "api_format": "local", "base_url": "", "local": true },
+    { "id": "cosyvoice_local", "name": "CosyVoice（本地）", "api_format": "local", "base_url": "", "local": true }
+  ]
+}

@@ -1,15 +1,21 @@
 import { useState } from 'react'
-import { IconKb, IconMeeting, IconModel, IconOrg } from './icons'
+import { IconBrowser, IconKb, IconMeeting, IconModel, IconOrg, IconSettings, IconVoice } from './icons'
 import ConfigPage from './pages/ConfigPage'
 import KbPage from './pages/KbPage'
 import MeetingPage from './pages/MeetingPage'
 import OrgPage from './pages/OrgPage'
+import RpaPage from './pages/RpaPage'
+import SettingsPage from './pages/SettingsPage'
+import VoicePage from './pages/VoicePage'
 
 const TABS = [
   { key: 'org', label: '组织架构', icon: <IconOrg />, page: <OrgPage /> },
   { key: 'config', label: '模型配置', icon: <IconModel />, page: <ConfigPage /> },
   { key: 'meeting', label: 'AI 会议', icon: <IconMeeting />, page: <MeetingPage /> },
+  { key: 'voice', label: '语音交互', icon: <IconVoice />, page: <VoicePage /> },
+  { key: 'rpa', label: '浏览器 RPA', icon: <IconBrowser />, page: <RpaPage /> },
   { key: 'kb', label: '知识库', icon: <IconKb />, page: <KbPage /> },
+  { key: 'settings', label: '系统设置', icon: <IconSettings />, page: <SettingsPage /> },
 ] as const
 
 function App() {

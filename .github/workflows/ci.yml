@@ -25,6 +25,7 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
+          cache-dependency-path: backend/requirements.txt
 
       - name: 安装依赖
         run: pip install -r requirements.txt
@@ -35,7 +36,7 @@ jobs:
       - name: 启动服务
         run: |
           python -m app.main &
-          for i in $(seq 1 30); do
+          for i in $(seq 1 40); do
             curl -sf http://127.0.0.1:8756/api/health && break
             sleep 1
           done
@@ -71,9 +72,19 @@ jobs:
           path: frontend/dist
 
   build-bundle:
-    name: 后端+前端一体化打包
-    runs-on: windows-latest
+    name: Sidecar 打包（PyInstaller onedir）
+    runs-on: ${{ matrix.os }}
     needs: [backend-test, frontend-build]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows
+            suffix: windows
+          - os: macos-14
+            platform: macos
+            suffix: macos
     defaults:
       run:
         shell: bash
@@ -94,7 +105,7 @@ jobs:
           name: frontend-dist
           path: frontend/dist
 
-      - name: 打包 sidecar（PyInstaller onedir）
+      - name: 打包 sidecar
         working-directory: backend
         run: |
           pip install -r requirements.txt pyinstaller
@@ -104,30 +115,171 @@ jobs:
           # 前端产物随包分发（exe 同级 frontend/dist，启动时自动托管并打开浏览器）
           mkdir -p dist/ai-company-agent/frontend
           cp -r ../frontend/dist dist/ai-company-agent/frontend/dist
+          # 厂商/模型清单需随包分发（PRD F-MOD-05：清单以配置文件维护）
+          mkdir -p dist/ai-company-agent/app/data
+          cp -r app/data/*.json dist/ai-company-agent/app/data/
+
+      - name: 校验体积（Gate G0：主安装包 ≤ 60 MB）
+        working-directory: backend
+        run: |
+          SIZE=$(du -sm dist/ai-company-agent | cut -f1)
+          echo "sidecar 体积（${{ matrix.platform }}）：${SIZE} MB"
+          if [ "$SIZE" -gt 60 ]; then
+            echo "::error::sidecar 超过 60 MB 预算（Gate G0 未通过）"
+            exit 1
+          fi
 
       - name: 上传可执行产物
         uses: actions/upload-artifact@v4
         with:
-          name: ai-company-agent-windows
+          name: ai-company-agent-${{ matrix.suffix }}
           path: backend/dist/ai-company-agent/
 
-  # Gate G0：Tauri 桌面壳构建（本机无 Rust，全部依赖 CI）
-  tauri-build:
-    name: Tauri 桌面壳构建
+  # ---------- Tauri 桌面壳（Gate G0：真实构建 + 签名） ----------
+  tauri-windows:
+    name: Tauri 桌面壳（Windows）
     runs-on: windows-latest
     needs: build-bundle
-    if: ${{ false }}  # TODO：接入 src-tauri 工程后取消此开关
     defaults:
       run:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v4
+
       - uses: dtolnay/rust-toolchain@stable
-      - uses: pnpm/action-setup@v4
+        with:
+          targets: x86_64-pc-windows-msvc
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm ci
-      - uses: tauri-apps/tauri-action@v0
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 安装前端依赖
+        run: npm ci
+
+      - name: 下载 sidecar 产物
+        uses: actions/download-artifact@v4
+        with:
+          name: ai-company-agent-windows
+          path: ../backend/dist
+
+      - name: 准备 Tauri 资源目录
+        shell: bash
+        run: |
+          mkdir -p ../src-tauri/resources/ai-company-agent
+          cp -r ../backend/dist/ai-company-agent/. ../src-tauri/resources/ai-company-agent/
+          ls ../src-tauri/resources/ai-company-agent | head
+
+      - name: 安装 Rust 依赖（缓存）
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: 构建 Tauri 应用
+        uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # F-SYS-08：Windows 代码签名（未配置证书时跳过，不阻塞构建）
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: src-tauri
+          args: --bundles nsis
+
+  tauri-macos:
+    name: Tauri 桌面壳（macOS 签名 + 公证）
+    runs-on: macos-14
+    needs: build-bundle
+    # 无证书时跳过；配置 APPLE_CERTIFICATE 等 secret 后启用（Gate G1）
+    if: ${{ vars.MACOS_SIGNING_ENABLED == 'true' }}
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 安装前端依赖
+        run: npm ci
+
+      - name: 下载 macOS sidecar 产物
+        uses: actions/download-artifact@v4
+        with:
+          name: ai-company-agent-macos
+          path: ../backend/dist
+
+      - name: 准备 Tauri 资源目录
+        run: |
+          mkdir -p ../src-tauri/resources/ai-company-agent
+          cp -R ../backend/dist/ai-company-agent/. ../src-tauri/resources/ai-company-agent/
+
+      - name: 安装 Rust 依赖（缓存）
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: 构建 + 签名 + 公证
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          projectPath: src-tauri
+          args: --bundles dmg
+
+  # ---------- 发布（自动更新通道，F-SYS-07） ----------
+  release:
+    name: 发布 Release + 更新清单
+    runs-on: ubuntu-latest
+    needs: [tauri-windows]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ai-company-agent-windows
+          path: backend/dist
+      - name: 生成更新清单
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          python - "$VERSION" <<'PY'
+          import json, os, sys
+          version = sys.argv[1]
+          base = "https://github.com/caidiekeji/ai-company-agent/releases/latest/download"
+          manifest = {
+            "version": version,
+            "current_version": version,
+            "notes": f"智企 Agent {version}",
+            "download_url": f"{base}/ai-company-agent-windows.zip",
+            "platforms": {
+              "windows-x86_64": f"{base}/ai-company-agent-windows.zip",
+            },
+            "signature": "",
+          }
+          with open("latest.json", "w", encoding="utf-8") as f:
+              json.dump(manifest, f, ensure_ascii=False, indent=2)
+          print(json.dumps(manifest, ensure_ascii=False))
+          PY
+      - name: 创建 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            latest.json
+            backend/dist/ai-company-agent-windows.zip
+          body_path: latest.json
