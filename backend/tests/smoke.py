@@ -5,6 +5,12 @@
 import json
 import sys
 
+# Windows（CI cp1252 控制台）打印中文兜底
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
 import httpx
 
 BASE = "http://127.0.0.1:8756"
