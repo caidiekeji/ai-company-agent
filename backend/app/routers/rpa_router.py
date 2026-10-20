@@ -19,12 +19,11 @@ def status():
 
 
 def _browser_ready() -> bool:
+    """真实探测浏览器内核是否已安装且可执行文件存在（跨应用目录/系统缓存）。"""
     try:
-        from playwright.sync_api import sync_playwright
+        from ..models_mgr import browser_installed
 
-        with sync_playwright() as p:
-            path = p.chromium.executable_path
-            return bool(path)
+        return browser_installed("playwright-chromium")
     except Exception:
         return False
 

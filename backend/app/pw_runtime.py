@@ -110,6 +110,64 @@ def browser_env() -> dict[str, str]:
     return env
 
 
+def candidate_roots(browser: str = "chromium") -> list[Path]:
+    """浏览器内核可能的落盘根目录（按优先级）：
+    1) 应用自定义目录 <数据目录>/browsers（本应用安装时用）
+    2) 当前进程 PLAYWRIGHT_BROWSERS_PATH（若已设置）
+    3) Playwright 默认系统缓存（`playwright install` 不带环境变量时的落点，CI 即此）
+    """
+    roots: list[Path] = [browsers_root()]
+    env = os.environ.get("PLAYWRIGHT_BROWSERS_PATH")
+    if env:
+        roots.append(Path(env))
+    if os.name == "nt":
+        roots.append(Path(os.environ.get("LOCALAPPDATA", Path.home())) / "ms-playwright")
+    elif sys.platform == "darwin":
+        roots.append(Path.home() / "Library" / "Caches" / "ms-playwright")
+    else:
+        roots.append(Path.home() / ".cache" / "ms-playwright")
+    seen, out = set(), []
+    for r in roots:
+        try:
+            r = Path(r).resolve()
+        except Exception:
+            continue
+        if r not in seen:
+            seen.add(r)
+            out.append(r)
+    return out
+
+
+def detect_browser_root(browser: str = "chromium") -> Path | None:
+    """在候选目录中定位「已安装」的浏览器内核根目录；找不到返回 None。
+
+    解决 CI / 本机用默认 `playwright install` 安装（落在系统缓存），
+    而应用默认只在 <数据目录>/browsers 查找导致的启动失败。
+    """
+    try:
+        from playwright.sync_api import sync_playwright
+    except Exception:
+        return None
+    prev = os.environ.get("PLAYWRIGHT_BROWSERS_PATH")
+    try:
+        for root in candidate_roots(browser):
+            os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(root)
+            try:
+                with sync_playwright() as p:
+                    b = p.chromium if "chromium" in browser else p.firefox
+                    path = b.executable_path
+                    if path and Path(path).exists():
+                        return root
+            except Exception:
+                continue
+    finally:
+        if prev is None:
+            os.environ.pop("PLAYWRIGHT_BROWSERS_PATH", None)
+        else:
+            os.environ["PLAYWRIGHT_BROWSERS_PATH"] = prev
+    return None
+
+
 def run_install(browser: str = "chromium", timeout: int = 3600) -> tuple[bool, str]:
     """执行内核安装，返回 (是否成功, 错误信息)。"""
     cmd = install_browser_cmd(browser)

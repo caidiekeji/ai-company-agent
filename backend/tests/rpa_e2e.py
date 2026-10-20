@@ -43,6 +43,8 @@ def main() -> None:
     # 3. 白名单放行 + 无障碍树快照
     c.post("/api/settings/whitelist", json={"domain": "example.com", "note": "RPA 测试"})
     r = c.post("/api/rpa/open", json={"url": "https://example.com/"})
+    if r.status_code != 200:
+        print("server error:", r.text[:600])
     check("rpa.open", r.status_code == 200, str(r.status_code))
     if r.status_code != 200:
         print(r.text[:400])

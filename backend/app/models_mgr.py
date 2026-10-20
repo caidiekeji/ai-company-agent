@@ -177,17 +177,15 @@ def install_browser(pid: str = "playwright-chromium") -> dict:
 
 def browser_installed(pid: str = "playwright-chromium") -> bool:
     try:
-        from playwright.sync_api import sync_playwright
+        from playwright.sync_api import sync_playwright  # noqa: F401
     except ImportError:
         return False
+    browser = "chromium" if "chromium" in pid else "firefox"
     try:
         from . import pw_runtime
 
-        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(pw_runtime.browsers_root())
-        with sync_playwright() as p:
-            b = p.chromium if "chromium" in pid else p.firefox
-            path = b.executable_path
-            return bool(path and Path(path).exists())
+        # 在候选目录（应用目录 / 系统默认缓存）中探测真实可执行文件是否就绪
+        return pw_runtime.detect_browser_root(browser) is not None
     except Exception:
         return False
 
