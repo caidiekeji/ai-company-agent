@@ -101,6 +101,9 @@ jobs:
           pyinstaller --noconfirm --onedir --name ai-company-agent \
             --collect-all uvicorn \
             run.py
+          # 前端产物随包分发（exe 同级 frontend/dist，启动时自动托管并打开浏览器）
+          mkdir -p dist/ai-company-agent/frontend
+          cp -r ../frontend/dist dist/ai-company-agent/frontend/dist
 
       - name: 上传可执行产物
         uses: actions/upload-artifact@v4
