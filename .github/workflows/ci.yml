@@ -72,7 +72,7 @@ jobs:
 
       - name: 启动服务
         run: |
-          python -m app.main &
+          python -m app.main > server.log 2>&1 &
           for i in $(seq 1 40); do
             curl -sf http://127.0.0.1:8756/api/health && break
             sleep 1
@@ -80,6 +80,10 @@ jobs:
 
       - name: RPA 端到端（真实浏览器）
         run: python tests/rpa_e2e.py
+
+      - name: 输出服务端日志（便于定位 RPA 启动失败）
+        if: always()
+        run: cat server.log || true
 
   meeting-deep:
     name: 会议编排深度测试

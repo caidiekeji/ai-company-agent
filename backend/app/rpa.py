@@ -78,15 +78,19 @@ class RpaSession:
             raise RuntimeError("Playwright 未安装，无法启动 RPA。请在设置 → 模型包中安装 RPA 浏览器内核并重装依赖。")
         from playwright.async_api import async_playwright
 
-        # 内核落盘目录：探测真实安装位置（应用自定义目录 / 系统默认缓存），避免 CI 或
-        # 用户用默认 `playwright install` 安装后应用仍去空目录查找导致启动失败。
+        # 内核落盘目录：探测真实安装位置（应用自定义目录 / 系统默认缓存）。
+        # detect_browser_root 用 Playwright 同步 API，必须在独立线程执行，避免
+        # "Sync API inside asyncio loop"；探测不到时回退到默认缓存而非空的 custom 目录。
         try:
             from . import pw_runtime
 
-            root = pw_runtime.detect_browser_root("chromium") or pw_runtime.browsers_root()
-            os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(root)
+            root = await asyncio.to_thread(pw_runtime.detect_browser_root, "chromium")
+            if root:
+                os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(root)
+            else:
+                os.environ.pop("PLAYWRIGHT_BROWSERS_PATH", None)
         except Exception:
-            pass
+            os.environ.pop("PLAYWRIGHT_BROWSERS_PATH", None)
 
         self.playwright = await async_playwright().start()
         # 登录态持久化必须用 launch_persistent_context：user_data_dir 仅它支持，
@@ -352,7 +356,11 @@ async def open_page(sid: str, url: str, employee_id: int | None = None,
         if not allow_non_whitelist or not settings.get_bool("rpa_allow_non_whitelist", False):
             return {"ok": False, "blocked": True, "reason": reason,
                     "message": f"{reason}。可在设置中把该域名加入白名单，或临时允许非白名单访问。"}
-    s = await get_session(sid, employee_id)
+    try:
+        s = await get_session(sid, employee_id)
+    except Exception as e:
+        # 浏览器启动失败（内核缺失 / 系统依赖 / 启动异常）返回可读信息，而非裸 500
+        return {"ok": False, "message": f"启动浏览器失败：{e}"}
     try:
         await s.page.goto(url, wait_until="domcontentloaded", timeout=30000)
     except Exception as e:
