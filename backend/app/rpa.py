@@ -9,6 +9,7 @@
 """
 import asyncio
 import json
+import os
 import re
 import time
 import uuid
@@ -76,6 +77,14 @@ class RpaSession:
         if not PLAYWRIGHT_AVAILABLE:
             raise RuntimeError("Playwright 未安装，无法启动 RPA。请在设置 → 模型包中安装 RPA 浏览器内核并重装依赖。")
         from playwright.async_api import async_playwright
+
+        # 内核落盘目录与安装时保持一致（<数据目录>/browsers）
+        try:
+            from . import pw_runtime
+
+            os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(pw_runtime.browsers_root())
+        except Exception:
+            pass
 
         self.playwright = await async_playwright().start()
         self.browser = await self.playwright.chromium.launch(headless=self.headless)

@@ -149,26 +149,25 @@ def start_download(pid: str) -> dict:
 
 
 def install_browser(pid: str = "playwright-chromium") -> dict:
-    """引导安装 Playwright 浏览器内核（首次启用 RPA 时调用）。"""
+    """引导安装 Playwright 浏览器内核（首次启用 RPA 时调用）。
+
+    走 pw_runtime 定位驱动，兼容 PyInstaller 打包后的 frozen 模式。
+    """
     browser = "chromium" if "chromium" in pid else "firefox"
     try:
-        import subprocess
-        import sys
+        import threading
+
+        from . import pw_runtime
 
         def worker() -> None:
             state = {"state": "downloading", "progress": 0.0, "error": None}
             with _lock:
                 _downloads[pid] = state
-            try:
-                proc = subprocess.run([sys.executable, "-m", "playwright", "install", browser],
-                                      capture_output=True, text=True, timeout=3600)
-                state["state"] = "done" if proc.returncode == 0 else "failed"
-                if proc.returncode != 0:
-                    state["error"] = (proc.stderr or proc.stdout)[-400:]
-                state["progress"] = 1.0
-            except Exception as e:
-                state["state"] = "failed"
-                state["error"] = str(e)
+            ok, err = pw_runtime.run_install(browser)
+            state["state"] = "done" if ok else "failed"
+            state["error"] = err or None
+            state["progress"] = 1.0
+            _sync_catalog()
 
         threading.Thread(target=worker, daemon=True, name=f"dl-{pid}").start()
         return {"ok": True, "message": f"开始安装 {browser} 内核（首次约 150–400 MB）"}
@@ -182,6 +181,9 @@ def browser_installed(pid: str = "playwright-chromium") -> bool:
     except ImportError:
         return False
     try:
+        from . import pw_runtime
+
+        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(pw_runtime.browsers_root())
         with sync_playwright() as p:
             b = p.chromium if "chromium" in pid else p.firefox
             path = b.executable_path

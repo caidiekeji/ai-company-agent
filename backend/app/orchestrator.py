@@ -35,6 +35,29 @@ HOST_PICK_PROMPT = (
     '{"next": "员工姓名"}\n参会人：{names}'
 )
 
+
+def _as_str(v: Any) -> str:
+    """把 LLM 返回的决议项规整为字符串。"""
+    if isinstance(v, str):
+        return v.strip()
+    if isinstance(v, dict):
+        return (v.get("decision") or v.get("text") or v.get("item") or "").strip()
+    return str(v).strip()
+
+
+def _as_todo(v: Any) -> dict | None:
+    """把 LLM 返回的待办项规整为 {task, owner}。"""
+    if isinstance(v, str):
+        t = v.strip()
+        return {"task": t, "owner": ""} if t else None
+    if isinstance(v, dict):
+        task = (v.get("task") or v.get("item") or v.get("content") or "").strip()
+        if not task:
+            return None
+        owner = (v.get("owner") or v.get("responsible") or v.get("assignee") or "").strip()
+        return {"task": task, "owner": owner}
+    return None
+
 AI_PICK_PROMPT = (
     "你是会议调度器。根据议题和已发生的发言，判断下一位最适合发言的人，只输出 JSON："
     '{"next": "员工姓名", "reason": "一句话理由"}\n'
@@ -326,6 +349,48 @@ class MeetingRuntime:
         return idx + 1
 
     # ---------- 纪要 ----------
+    @staticmethod
+    def _parse_json_obj(txt: str) -> dict | None:
+        """容忍代码块、前后缀文字：截取第一个 `{` 到最后一个 `}` 再解析。"""
+        if not txt:
+            return None
+        txt = txt.strip().strip("`").removeprefix("json").strip()
+        start, end = txt.find("{"), txt.rfind("}")
+        if start == -1 or end == -1 or end <= start:
+            return None
+        try:
+            return json.loads(txt[start:end + 1])
+        except Exception:
+            return None
+
+    @staticmethod
+    def _heuristic_extract(transcript: str, names: dict[int, str]) -> tuple[list, list]:
+        """LLM 未返回结构化 JSON（离线 mock / 模型抖动）时的兜底抽取：
+        按中文决策/待办信号从逐句发言中析出决议与待办（含负责人识别）。"""
+        DEC_KW = ("决定", "决议", "确定", "同意", "锁定", "通过", "结论", "拍板")
+        TODO_KW = ("待办", "行动项", "下一步", "需要", "建议", "计划", "跟进", "安排", "落实")
+        name_list = list(names.values())
+        decisions, todos = [], []
+        for line in transcript.splitlines():
+            _, sep, text = line.partition("：")
+            if not sep:
+                continue
+            t = text.strip()
+            if not t or len(t) > 120:
+                continue
+            if any(k in t for k in DEC_KW):
+                decisions.append(t[:80])
+            if any(k in t for k in TODO_KW):
+                owner = next((n for n in name_list if n in text), "")
+                todos.append({"task": t[:80], "owner": owner})
+        decisions = list(dict.fromkeys(decisions))[:10]
+        seen, uniq = set(), []
+        for td in todos:
+            if td["task"] not in seen:
+                seen.add(td["task"])
+                uniq.append(td)
+        return decisions, uniq[:10]
+
     async def _make_summary(self, m: dict, participants: list[dict]) -> dict:
         rows = query("SELECT employee_id, content FROM meeting_messages "
                      "WHERE meeting_id=? AND content NOT LIKE '[已入会]%' ORDER BY id", (self.meeting_id,))
@@ -342,16 +407,18 @@ class MeetingRuntime:
         except Exception:
             raw = ""
         summary, decisions, todos = "", [], []
-        try:
-            txt = raw.strip().strip("`").removeprefix("json").strip()
-            data = json.loads(txt)
-            summary = data.get("summary", "")
-            decisions = data.get("decisions", []) or []
-            todos = data.get("todos", []) or []
-        except Exception:
-            summary = (raw or transcript)[:300]
+        data = self._parse_json_obj(raw)
+        if data:
+            summary = data.get("summary", "") or ""
+            decisions = [_as_str(d) for d in (data.get("decisions") or []) if _as_str(d)]
+            todos = [_as_todo(t) for t in (data.get("todos") or []) if _as_todo(t)]
         if not summary:
-            summary = transcript[:300]
+            summary = (raw or transcript)[:300]
+        # 离线 mock / 模型未返回结构化字段时，按发言信号兜底抽取，保证决议/待办非空
+        if not decisions or not todos:
+            h_dec, h_todo = self._heuristic_extract(transcript, names)
+            decisions = decisions or h_dec
+            todos = todos or h_todo
         execute("UPDATE meetings SET summary=?, decisions_json=?, todos_json=? WHERE id=?",
                 (summary, json.dumps(decisions, ensure_ascii=False),
                  json.dumps(todos, ensure_ascii=False), self.meeting_id))

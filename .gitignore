@@ -18,6 +18,7 @@ frontend/dist/
 # PyInstaller
 backend/dist/
 backend/build/
+backend/ai-size-test.spec
 
 # Tauri
 src-tauri/target/

@@ -53,10 +53,14 @@ def create_meeting(body: dict | None = None):
     topic = (body.get("topic") or "").strip()
     participant_ids = body.get("participant_ids") or []
     template_id = body.get("template_id")
+    max_rounds = body.get("max_rounds")
     if template_id:
         tpl = next((t for t in TEMPLATES if t["id"] == template_id), None)
         if tpl:
             topic = tpl["topic"].format(topic=topic or "未命名议题")
+            # 模板自带轮次建议；用户显式指定时以用户为准
+            if not max_rounds:
+                max_rounds = tpl["rounds"]
     if not topic:
         raise HTTPException(400, "议题必填")
     if len(participant_ids) < 2:
@@ -68,7 +72,7 @@ def create_meeting(body: dict | None = None):
         "INSERT INTO meetings(topic, host_employee_id, scheduler_mode, max_rounds, token_budget, "
         "context_visibility, visible_rounds, compress_context, template_id) VALUES (?,?,?,?,?,?,?,?,?)",
         (topic, host_id, body.get("scheduler_mode", "round_robin"),
-         body.get("max_rounds", 6), body.get("token_budget", 60000),
+         max_rounds or 6, body.get("token_budget", 60000),
          body.get("context_visibility", "host_full"), body.get("visible_rounds", 6),
          1 if body.get("compress_context", settings.get_bool("context_compress_default", True)) else 0,
          template_id))
