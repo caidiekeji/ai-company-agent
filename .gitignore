@@ -13,3 +13,7 @@ frontend/dist/
 .DS_Store
 .idea/
 .vscode/
+
+# PyInstaller
+backend/dist/
+backend/build/
