@@ -35,18 +35,61 @@ def health():
     return {"ok": True, "service": "ai-company-agent"}
 
 
-# 托管前端构建产物（Tauri 形态同理：前端打包进应用，后端仅提供 API）
-_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
-if _DIST.exists():
+def _find_dist() -> Path | None:
+    """前端产物探测：开发态 = 仓库 frontend/dist；打包态 = exe 同级 frontend/dist。"""
+    import sys
+
+    if getattr(sys, "frozen", False):
+        candidates = [Path(sys.executable).parent / "frontend" / "dist"]
+    else:
+        candidates = [Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"]
+    return next((p for p in candidates if p.exists()), None)
+
+
+_DIST = _find_dist()
+if _DIST is not None:
     from fastapi.staticfiles import StaticFiles
 
     app.mount("/", StaticFiles(directory=_DIST, html=True), name="frontend")
 
 
-def main() -> None:
-    import uvicorn
+def _pick_port(start: int = 8756, attempts: int = 10) -> int:
+    import socket
 
-    uvicorn.run(app, host="127.0.0.1", port=8756, log_level="warning")
+    for port in range(start, start + attempts):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(("127.0.0.1", port))
+                return port
+            except OSError:
+                continue
+    raise RuntimeError(f"{start}~{start + attempts - 1} 端口均被占用")
+
+
+def main() -> None:
+    """双击启动入口：崩溃不闪退（留窗显示错误）、自动打开浏览器、端口占用自动顺延。"""
+    import sys
+    import threading
+    import webbrowser
+
+    try:
+        port = _pick_port()
+        url = f"http://127.0.0.1:{port}/"
+        threading.Timer(1.2, lambda: webbrowser.open(url)).start()
+        print(f"智企 Agent 已启动：{url}\n关闭本窗口即退出应用。")
+        import uvicorn
+
+        uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
+    except Exception:
+        import traceback
+
+        traceback.print_exc()
+        print("\n启动失败，请把上面的错误信息截图反馈。")
+        try:
+            input("按回车退出...")
+        except EOFError:
+            pass
+        sys.exit(1)
 
 
 if __name__ == "__main__":
