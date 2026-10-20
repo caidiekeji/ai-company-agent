@@ -1,0 +1,126 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend-test:
+    name: 后端冒烟测试
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: backend
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: 安装依赖
+        run: pip install fastapi "uvicorn[standard]" httpx keyring cryptography
+
+      - name: 语法检查
+        run: python -m compileall -q app
+
+      - name: 启动服务
+        run: |
+          python -m app.main &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8756/api/health && break
+            sleep 1
+          done
+
+      - name: 运行端到端冒烟
+        run: python tests/smoke.py
+
+  frontend-build:
+    name: 前端构建
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: TypeScript 检查 + 构建
+        run: npm run build
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+
+  build-bundle:
+    name: 后端+前端一体化打包
+    runs-on: windows-latest
+    needs: [backend-test, frontend-build]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 下载前端产物
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+
+      - name: 打包 sidecar（PyInstaller onedir）
+        working-directory: backend
+        run: |
+          pip install fastapi "uvicorn[standard]" httpx keyring cryptography pyinstaller
+          pyinstaller --noconfirm --onedir --name ai-company-agent \
+            --collect-all uvicorn \
+            run.py
+
+      - name: 上传可执行产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-company-agent-windows
+          path: backend/dist/ai-company-agent/
+
+  # Gate G0：Tauri 桌面壳构建（本机无 Rust，全部依赖 CI）
+  tauri-build:
+    name: Tauri 桌面壳构建
+    runs-on: windows-latest
+    needs: build-bundle
+    if: ${{ false }}  # TODO：接入 src-tauri 工程后取消此开关
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
